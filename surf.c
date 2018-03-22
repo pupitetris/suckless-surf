@@ -66,6 +66,7 @@ typedef enum {
 	Java,
 	JavaScript,
 	KioskMode,
+	InternalDownload,
 	LoadImages,
 	MediaManualPlay,
 	Plugins,
@@ -295,7 +296,7 @@ static ParamName loadfinished[] = {
 void
 usage(void)
 {
-	die("usage: surf [-bBdDfFgGiIkKmMnNpPsStTvwxX]\n"
+	die("usage: surf [-bBdDfFgGiIkKlLmMnNpPsStTvwxX]\n"
 	    "[-a cookiepolicies ] [-c cookiefile] [-C stylefile] [-e xid]\n"
 	    "[-r scriptfile] [-u useragent] [-z zoomlevel] [uri]\n");
 }
@@ -773,6 +774,8 @@ setparameter(Client *c, int refresh, ParamName p, const Arg *a)
 		break;
 	case KioskMode:
 		return; /* do nothing */
+	case InternalDownload:
+		return; /* do nothing */
 	case LoadImages:
 		webkit_settings_set_auto_load_images(s, a->i);
 		break;
@@ -978,14 +981,15 @@ newwindow(Client *c, const Arg *a, int noembed)
 		snprintf(tmp, LENGTH(tmp), "%lu", embed);
 		cmd[i++] = tmp;
 	}
-	cmd[i++] = curconfig[RunInFullscreen].val.i ? "-F" : "-f" ;
-	cmd[i++] = curconfig[Geolocation].val.i ?     "-G" : "-g" ;
-	cmd[i++] = curconfig[LoadImages].val.i ?      "-I" : "-i" ;
-	cmd[i++] = curconfig[KioskMode].val.i ?       "-K" : "-k" ;
-	cmd[i++] = curconfig[Style].val.i ?           "-M" : "-m" ;
-	cmd[i++] = curconfig[Inspector].val.i ?       "-N" : "-n" ;
-	cmd[i++] = curconfig[Plugins].val.i ?         "-P" : "-p" ;
-	if (scriptfile && g_strcmp0(scriptfile, "")) {
+	cmd[i++] = curconfig[RunInFullscreen].val.i ?  "-F" : "-f" ;
+	cmd[i++] = curconfig[Geolocation].val.i ?      "-G" : "-g" ;
+	cmd[i++] = curconfig[LoadImages].val.i ?       "-I" : "-i" ;
+	cmd[i++] = curconfig[KioskMode].val.i ?        "-K" : "-k" ;
+	cmd[i++] = curconfig[InternalDownload].val.i ? "-L" : "-l" ;
+	cmd[i++] = curconfig[Style].val.i ?            "-M" : "-m" ;
+	cmd[i++] = curconfig[Inspector].val.i ?        "-N" : "-n" ;
+	cmd[i++] = curconfig[Plugins].val.i ?          "-P" : "-p" ;
+	if (scriptfile && g_strcmp0(scriptfile, "")) { 
 		cmd[i++] = "-r";
 		cmd[i++] = scriptfile;
 	}
@@ -1638,7 +1642,8 @@ decideresource(WebKitPolicyDecision *d, Client *c)
 		}
 	}
 
-	if (webkit_response_policy_decision_is_mime_type_supported(r)) {
+	if (curconfig[InternalDownload].val.i ||
+	    webkit_response_policy_decision_is_mime_type_supported(r)) {
 		webkit_policy_decision_use(d);
 	} else {
 		webkit_policy_decision_ignore(d);
@@ -1662,8 +1667,10 @@ downloadstarted(WebKitWebContext *wc, WebKitDownload *d, Client *c)
 void
 responsereceived(WebKitDownload *d, GParamSpec *ps, Client *c)
 {
-	download(c, webkit_download_get_response(d));
-	webkit_download_cancel(d);
+	if (!curconfig[InternalDownload].val.i) {
+		download(c, webkit_download_get_response(d));
+		webkit_download_cancel(d);
+	}
 }
 
 void
@@ -1968,6 +1975,14 @@ main(int argc, char *argv[])
 	case 'K':
 		defconfig[KioskMode].val.i = 1;
 		defconfig[KioskMode].prio = 2;
+		break;
+	case 'l':
+		defconfig[InternalDownload].val.i = 0;
+		defconfig[InternalDownload].prio = 2;
+		break;
+	case 'L':
+		defconfig[InternalDownload].val.i = 1;
+		defconfig[InternalDownload].prio = 2;
 		break;
 	case 'm':
 		defconfig[Style].val.i = 0;
